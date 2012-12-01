@@ -19,12 +19,38 @@ endif()
 include (${CMAKE_INSTALL_PREFIX}/share/dart/DARTConfig.cmake)
 include (${CMAKE_INSTALL_PREFIX}/share/grip/GRIP_config.cmake)
 
-LINK_DIRECTORIES( ${DART_LIBRARY_DIRS} )
-INCLUDE_DIRECTORIES( ${DART_INCLUDE_DIRS} )
+find_package( PCL 1.6 REQUIRED )
+LINK_DIRECTORIES( ${DART_LIBRARY_DIRS} /usr/lib )
+INCLUDE_DIRECTORIES( ${DART_INCLUDE_DIRS}  ${PCL_INCLUDE_DIRS} )
 
 # Search all header and source files
-set ( srcs_files tabProject.cpp tabProjectApp.cpp )
-set ( hdrs_files tabProject.h )
+set ( srcs_files tabProject.cpp tabProjectApp.cpp builder.cpp PCL_Tools/PCL_Tools.cpp )
+set ( hdrs_files tabProject.h builder.h PCL_Tools/PCL_Tools.h )
+
+# Set some extra libraries
+set( myPCL_Libs 
+/usr/lib/libboost_system-mt.so
+/usr/lib/libboost_thread-mt.so
+/usr/lib/libboost_date_time-mt.so
+/usr/lib/libboost_iostreams-mt.so
+pcl_common
+pcl_io
+pcl_features
+pcl_filters
+pcl_geometry
+pcl_kdtree
+pcl_visualization
+pcl_search
+pcl_surface
+vtkHybrid
+vtkIO
+vtkViews
+vtkCommon
+vtkRendering
+vtkVolumeRendering
+pcl_io_ply
+OpenNI
+pcl_apps )
 
 
 if(WIN32)
@@ -46,7 +72,7 @@ set_target_properties (tabProject PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
    else()
   add_executable (tabProject ${hdrs_files} ${srcs_files} )
 endif()
-  target_link_libraries (tabProject ${GRIP_LIBRARIES} ggui ${DART_LIBRARIES} ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${GLUT_glut_LIBRARY} ${GLU_LIBRARIES} )
+  target_link_libraries (tabProject ${GRIP_LIBRARIES} ggui ${DART_LIBRARIES} ${wxWidgets_LIBRARIES} ${OPENGL_LIBRARIES} ${GLUT_glut_LIBRARY} ${GLU_LIBRARIES} ${myPCL_Libs})
 
 else (wxWidgets_FOUND)
   message ("wxWidgets not found!")

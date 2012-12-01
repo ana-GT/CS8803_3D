@@ -52,9 +52,18 @@
 
 #include <fstream>
 
+#include "builder.h"
+
 using namespace std;
 using namespace Eigen;
 
+
+/// Builder object
+Builder gB;
+
+/**
+ * @function onButton
+ */
 void ProjectTab::onButton(wxCommandEvent &evt) {
 
   // Check if a world exists
@@ -88,27 +97,49 @@ void ProjectTab::onButton(wxCommandEvent &evt) {
   case button_startSearch:
     startSearch();
     break;
-  case button_cloud:
-    cloud();
+  case button_grabCloud:
+    grabCloud();
+    break;
+  case button_showCloud:
+    showCloud();
     break;
   case button_depthMap:
     depthMap();
     break;	
+  case button_addPCD:
+    gB.addPCD( mGrabbedPCD );
+    break;
+  case button_getMesh:
+    gB.getMesh(  gB.mBundledTransformedPointClouds );
+    break;
+  case button_showMesh:
+    gB.showMesh();
+    break;
+  case button_runICP:
+    gB.bundle1();
+    break;
+  case button_showFullPCD:
+    gB.showFullPCD();
+    break;
   }
 }
 
+/**
+ * @function attention
+ */
 void ProjectTab::attention () {
 
   // Set the predetermined configuration
   VectorXd conf (7);
-  conf << 0.0, -0.648582, 0.0, 1.11803, 0.0, 1.62454, 0;
+  conf << 1.57, -0.2618, 0, 0, 0, 2.09, 0; // 90, -15, 120
+
   mWorld->getRobot(0)->setQuickDofs(conf);
   mWorld->getRobot(0)->update();
-  robotics::Object* bear = mWorld->getObject(4);
-  bear->setPositionXYZ(1.608, 2.4, 0.416);
-  bear->update();
 }
 
+/**
+ * @function startSearch
+ */
 void ProjectTab::startSearch () {
   
   // Read in the trajectory from the file
@@ -155,75 +186,81 @@ void ProjectTab::startSearch () {
   }
 }
 
+/**
+ * @function getDisparities
+ */
 void ProjectTab::getDisparities (vector <Vector3d>& disparities, double& focalLength) {
 
-	// Set the constants
-	size_t kWidth = 640, kHeight = 480;
-	float kBaseline = 0.10;
-	float kDisparityNoise = 0.1;
-
-	// Assert the baseline is non-negative
-	assert((kBaseline > 0.0) && "Non-positive baseline.");
-
-	printf("Starting to save... "); fflush(stdout);
-
-	// Get the color data
-	unsigned char* im = new unsigned char [3 * kWidth * kHeight];
-	glReadPixels(0,0, kWidth, kHeight, GL_RGB, GL_UNSIGNED_BYTE, im);
-
-	// Get the depths of the objects
-	float* depths = new float [kWidth * kHeight];
-	glReadPixels(0,0, kWidth, kHeight, GL_DEPTH_COMPONENT, GL_FLOAT, depths);
-
-	// Get the view options
-	glLoadIdentity();
-	GLdouble modelMatrix[16];
-	glGetDoublev(GL_MODELVIEW_MATRIX,modelMatrix);
-	GLdouble projMatrix[16];
-	glGetDoublev(GL_PROJECTION_MATRIX,projMatrix);
-	int viewport[4];
-	glGetIntegerv(GL_VIEWPORT,viewport);
-
-	// Get focal length using some pixel
-	double x_, y_, z_;
-	gluUnProject(300, 200, depths[200 * kWidth + 300], modelMatrix, projMatrix, viewport, &x_, &y_, &z_);
-	focalLength = (300 - 320) * (-z_ / x_);
-
-	// Create the pixel data
-	disparities.clear();
-	for(size_t v = 0; v < kHeight; v++) {
-		for(size_t u = 0; u < kWidth; u++) {
-
-			// Skip the pixel if it is in the background
-			Vector2d pix (u,v); //= (*pix_it);
-			size_t k = (pix(1) * kWidth + pix(0)) * 3;
-			if((im[k] == 0) && (im[k+1] == 0) && (im[k+2] == 0)) continue;
-
-			// Get the position data - if the 'z' is the far clip, skip
-			size_t k2 = (pix(1) * kWidth + pix(0));
-			double x_, y_, z_;
-			gluUnProject(u, v, depths[k2], modelMatrix, projMatrix, viewport, &x_, &y_, &z_);
-			Vector3d loc (x_, y_, z_);
-			if(-loc(2) > 15.0) continue;		// TODO: Replace 15.0 with camera.zFar
-
-			// Compute the disparity and add noise to it
-			float disparity = (kBaseline * focalLength) / -loc(2);
-		  float r1 = ((float) rand()) / RAND_MAX, r2 = ((float) rand()) / RAND_MAX;
-		  float noiseEffect = sqrt(-2.0 * log(r1)) * cos(2 * M_PI * r2) * kDisparityNoise; 
-			disparity += noiseEffect;
-
-			// Save the pixel location and the disparity
-			size_t color = (im[k] << 16) | (im[k+1] << 8) | (im[k+2]);
-			disparities.push_back(Vector3d(k2, disparity, color));
-		}
-	}
-
-	printf("Data acquired.\n"); fflush(stdout);
+  // Set the constants
+  size_t kWidth = 640, kHeight = 480;
+  float kBaseline = 0.10;
+  float kDisparityNoise = 0.1;
+  
+  // Assert the baseline is non-negative
+  assert((kBaseline > 0.0) && "Non-positive baseline.");
+  
+  printf("Starting to save... "); fflush(stdout);
+  
+  // Get the color data
+  unsigned char* im = new unsigned char [3 * kWidth * kHeight];
+  glReadPixels(0,0, kWidth, kHeight, GL_RGB, GL_UNSIGNED_BYTE, im);
+  
+  // Get the depths of the objects
+  float* depths = new float [kWidth * kHeight];
+  glReadPixels(0,0, kWidth, kHeight, GL_DEPTH_COMPONENT, GL_FLOAT, depths);
+  
+  // Get the view options
+  glLoadIdentity();
+  GLdouble modelMatrix[16];
+  glGetDoublev(GL_MODELVIEW_MATRIX,modelMatrix);
+  GLdouble projMatrix[16];
+  glGetDoublev(GL_PROJECTION_MATRIX,projMatrix);
+  int viewport[4];
+  glGetIntegerv(GL_VIEWPORT,viewport);
+  
+  // Get focal length using some pixel
+  double x_, y_, z_;
+  gluUnProject(300, 200, depths[200 * kWidth + 300], modelMatrix, projMatrix, viewport, &x_, &y_, &z_);
+  focalLength = (300 - 320) * (-z_ / x_);
+  
+  // Create the pixel data
+  disparities.clear();
+  for(size_t v = 0; v < kHeight; v++) {
+    for(size_t u = 0; u < kWidth; u++) {
+      
+      // Skip the pixel if it is in the background
+      Vector2d pix (u,v); //= (*pix_it);
+      size_t k = (pix(1) * kWidth + pix(0)) * 3;
+      if((im[k] == 0) && (im[k+1] == 0) && (im[k+2] == 0)) continue;
+      
+      // Get the position data - if the 'z' is the far clip, skip
+      size_t k2 = (pix(1) * kWidth + pix(0));
+      double x_, y_, z_;
+      gluUnProject(u, v, depths[k2], modelMatrix, projMatrix, viewport, &x_, &y_, &z_);
+      Vector3d loc (x_, y_, z_);
+      if(-loc(2) > 15.0) continue;		// TODO: Replace 15.0 with camera.zFar
+      
+      // Compute the disparity and add noise to it
+      float disparity = (kBaseline * focalLength) / -loc(2);
+      float r1 = ((float) rand()) / RAND_MAX, r2 = ((float) rand()) / RAND_MAX;
+      float noiseEffect = sqrt(-2.0 * log(r1)) * cos(2 * M_PI * r2) * kDisparityNoise; 
+      disparity += noiseEffect;
+      
+      // Save the pixel location and the disparity
+      size_t color = (im[k] << 16) | (im[k+1] << 8) | (im[k+2]);
+      disparities.push_back(Vector3d(k2, disparity, color));
+    }
+  }
+  
+  printf("Data acquired.\n"); fflush(stdout);
 }
 
-/// Prints the PCD file header
+/**
+ * @function printPCDHeader
+ * @brief Prints the PCD file header
+ */
 void ProjectTab::printPCDHeader (FILE* file, size_t numPoints) {
-
+  
   fprintf(file, "VERSION 0.7\n");
   fprintf(file, "FIELDS x y z rgb\n");
   fprintf(file, "SIZE 4 4 4 4\n");
@@ -236,61 +273,68 @@ void ProjectTab::printPCDHeader (FILE* file, size_t numPoints) {
   fprintf(file, "DATA ascii\n");
 }
 
-void ProjectTab::cloud () {
+/**
+ * @function  grabCloud
+ */
+void ProjectTab::grabCloud () {
 
-	// Set the constants; TODO: Move these constants to class definition
-	size_t kWidth = 640, kHeight = 480;
-	float kBaseline = 0.10;
-	float kDisparityNoise = 0.1;
+  // Set the constants; TODO: Move these constants to class definition
+  size_t kWidth = 640, kHeight = 480;
+  float kBaseline = 0.10;
+  float kDisparityNoise = 0.1;
+  
+  // Get the disparities
+  double focalLength;
+  vector <Vector3d> disparities;
+  getDisparities(disparities, focalLength);
+  
+  // Create the 3D points and PCD
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
+  cloud->width = 1;
+  cloud->height = disparities.size();
+  cloud->points.resize( cloud->width*cloud->height );
 
-	// Get the disparities
-	double focalLength;
-	vector <Vector3d> disparities;
-	getDisparities(disparities, focalLength);
-
-	// Create the 3D points
-	vector <Vector3d> points;
-	for(size_t i = 0; i < disparities.size(); i++) {
-
-		// Get the pixel
-		size_t v = (size_t) disparities[i](0) / kWidth;
-		size_t u = (size_t) disparities[i](0) % kWidth;
-
-		// Change the location based on the new disparity
-		double disparity = disparities[i](1);
-		float distZ = -(kBaseline * focalLength) / disparity;
-		float distX = ((int) u - (int) kWidth/2) * distZ / focalLength;
-		float distY = ((int) v - (int) kHeight/2) * distZ / focalLength;
-
-		// Save the pixel
-		points.push_back(Vector3d(-distX, distY, -distZ));
-	}
-
-	// Save the points to a .pcd file
-  FILE* file = fopen("cloud.pcd", "w");
-  assert((file != NULL) && "The .pcd file could not be opened");
-
-  // Write the pixel data to the file
-  printPCDHeader(file, points.size());
-	for(size_t i = 0; i < points.size(); i++) {
-		Vector3d& loc = points[i];
-    fprintf(file, "%lf\t%lf\t%lf\t%lu\n", loc(0), loc(1), loc(2), (size_t) disparities[i](2)); 
-	}
-
-  // Close the file
-  assert((fclose(file) == 0) && "The file could not be closed successfully");
-
-	// Run the pcd_viewer
-	system("pcd_viewer cloud.pcd &");
-  printf("PCD file saved.\n"); fflush(stdout);
+  vector <Vector3d> points;
+  for(size_t i = 0; i < disparities.size(); i++) {
+    
+    // Get the pixel
+    size_t v = (size_t) disparities[i](0) / kWidth;
+    size_t u = (size_t) disparities[i](0) % kWidth;
+    
+    // Change the location based on the new disparity
+    double disparity = disparities[i](1);
+    float distZ = -(kBaseline * focalLength) / disparity;
+    float distX = ((int) u - (int) kWidth/2) * distZ / focalLength;
+    float distY = ((int) v - (int) kHeight/2) * distZ / focalLength;
+    
+    // Save the pixel
+    points.push_back(Vector3d(-distX, distY, -distZ));
+    // Save the pointcloud
+    cloud->points[i].x = -distX;
+    cloud->points[i].y = distY;
+    cloud->points[i].z = -distZ;
+  }
+  
+  mGrabbedPCD = cloud;
+  printf(" [i] Grabbed cloud with %d points \n", mGrabbedPCD->height );
 }
 
+/**
+ * @functino showCloud
+ */
+void  ProjectTab::showCloud() {
+  gB.show( mGrabbedPCD );
+}
+
+/**
+ * @function depthMap
+ */
 void ProjectTab::depthMap () {
-
-	vector <Vector2d> disparities;
-	//getDisparities(disparities);
-	
-
+  
+  vector <Vector2d> disparities;
+  //getDisparities(disparities);
+  
+  
 }
 
 /**
@@ -319,10 +363,13 @@ ProjectTab::ProjectTab(wxWindow *parent, const wxWindowID id,
   wxStaticBox* rightBox = new wxStaticBox(this, -1, wxT("3D Data"));
   wxStaticBoxSizer* rightBoxSizer = new wxStaticBoxSizer(rightBox, wxVERTICAL);
   
-  // Add the "Attention!" button
-  rightBoxSizer->Add(new wxButton(this, button_cloud, wxT("Show Cloud")), 0, wxALL, 10);
+  // Add the "grab Cloud" button
+  rightBoxSizer->Add(new wxButton(this, button_grabCloud, wxT("Grab Cloud")), 0, wxALL, 10);
+
+  // Add the "show Cloud" button
+  rightBoxSizer->Add(new wxButton(this, button_showCloud, wxT("Show Cloud")), 0, wxALL, 10);
   
-  // Add the "Go!" button
+  // Add the "depth Map" button
   rightBoxSizer->Add(new wxButton(this, button_depthMap, wxT("Show Depth Map")), 0, wxALL, 10);
   
   // ===========================================================
@@ -336,6 +383,9 @@ ProjectTab::ProjectTab(wxWindow *parent, const wxWindowID id,
   // Add the "ICP" button
   registrationBoxSizer->Add(new wxButton(this, button_runICP, wxT("Run ICP")), 0, wxALL, 10);
 
+  // Add the "ICP" button
+  registrationBoxSizer->Add(new wxButton(this, button_showFullPCD, wxT("Show Full PCD")), 0, wxALL, 10);
+
   // ===========================================================
   // 4. Create Surface container
   wxStaticBox* surfaceBox = new wxStaticBox(this, -1, wxT("Surface"));
@@ -343,6 +393,10 @@ ProjectTab::ProjectTab(wxWindow *parent, const wxWindowID id,
 
   // Add the "Get Mesh" Button
   surfaceBoxSizer->Add(new wxButton(this, button_getMesh, wxT("Get Mesh")), 0, wxALL, 10);
+
+
+  // Add the "View Mesh" Button
+  surfaceBoxSizer->Add(new wxButton(this, button_showMesh, wxT("View Mesh")), 0, wxALL, 10);
   
   // ===========================================================
   // 5. Add both sizers to the full sizer

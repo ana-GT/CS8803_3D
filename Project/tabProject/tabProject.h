@@ -49,6 +49,7 @@
 
 #include <Tabs/GRIPTab.h>
 #include <Tools/Constants.h>
+#include "builder.h"
 
 /// The tab definition
 class ProjectTab : public GRIPTab
@@ -59,11 +60,14 @@ public:
   enum Events {
     button_attention,
     button_startSearch,
-    button_cloud,
+    button_grabCloud,
+    button_showCloud,
     button_depthMap,
     button_addPCD,
     button_runICP,
-    button_getMesh
+    button_showFullPCD,
+    button_getMesh,
+    button_showMesh
   };
   
   /// The default constructor
@@ -83,6 +87,8 @@ public:
   
   /// Moves the arm around to visualize more of the scene
   void startSearch ();
+
+  void showCloud();
   
   /// Prints a pcd header to the file
   void printPCDHeader (FILE* file, size_t numPoints);
@@ -91,7 +97,7 @@ public:
   void getDisparities (std::vector <Eigen::Vector3d>& disparities, double& focalLength);
   
   /// Displays the point cloud in a new window after getting the depth values
-  void cloud ();
+  void grabCloud ();
   
   /// Displays the depth map mapped to a greyscale image
   void depthMap ();
@@ -102,6 +108,9 @@ public:
   /// Handles the input from button interfaces
   void onButton(wxCommandEvent &evt);
   
+  // Cloud grabbed
+  pcl::PointCloud<pcl::PointXYZ>::Ptr mGrabbedPCD;
+
   // The macros for wxWidget
  public:
   DECLARE_DYNAMIC_CLASS(ProjectTab)
