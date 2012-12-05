@@ -14,6 +14,8 @@
 #include "PCL_Tools/PCL_Tools.h"
 #include <boost/thread/thread.hpp>
 
+#include <Eigen/Dense>
+
 /**
  * @function Builder
  */
@@ -33,10 +35,14 @@ Builder::~Builder() {
 /**
  * @function addPCD
  */
-bool Builder::addPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd ) {
+bool Builder::addPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd,
+		      Eigen::Matrix4d _transform ) {
 
   mPCData.push_back( _pcd );
   printf("Added Pointcloud. Current number of PCD: %d \n", mPCData.size() );
+  mEndEffectorTransforms.push_back( _transform );
+  // Save the transformation
+  std::cout << "Transformation saved:\n " << _transform << std::endl;
   return true;
 }
 
@@ -65,8 +71,12 @@ void Builder::show( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd ) {
 void Builder::showFullPCD() {
   
   mViewer = createViewer( 0, 0, 0);
-  viewPCD( mBundledTransformedPointClouds, mViewer, 200, 200, 200 );
-
+  //mViewer->createViewPort (0.0, 0, 0.5, 1.0, mViewport1 );
+  //mViewer->createViewPort (0.5, 0, 1.0, 1.0, mViewport2 );
+  for( int i = 0; i < mTransformedPCData.size(); ++i ) {
+    viewPCD( mTransformedPCData[i], mViewer, 200, 200, 200 );
+  }
+  viewBall(0,0,0, 0.2, mViewer, 250,0,0);
   while( !mViewer->wasStopped() ) {
     mViewer->spinOnce (100);
     boost::this_thread::sleep (boost::posix_time::seconds (1));
@@ -272,8 +282,8 @@ void Builder::stitchTransformedData() {
 
   // Bundle them together in a big PCD file
   int index = 0;
-  for( int i = 0; i < mTransformedPCData.size(); ++i ) {
-    for( int j = 0; j < mTransformedPCData[i]->points.size(); ++j ) {
+  for( unsigned int i = 0; i < mTransformedPCData.size(); ++i ) {
+    for( unsigned int j = 0; j < mTransformedPCData[i]->points.size(); ++j ) {
       temp->points[index].x = mTransformedPCData[i]->at(j).x;
       temp->points[index].y = mTransformedPCData[i]->at(j).y;
       temp->points[index].z = mTransformedPCData[i]->at(j).z;
@@ -289,15 +299,16 @@ void Builder::stitchTransformedData() {
   std::string filename = stream.str();
   
   if( pcl::io::savePCDFile( filename, *mBundledTransformedPointClouds, true ) == 0 ) {
-    std::cout << "Saved " << filename << "." << std::endl;
+    std::cout << "Saved " << filename << std::endl;
   }
 
   /// Small version
   // Save each PCD 
+  /*
   numPoints = 0;
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr tempS( new pcl::PointCloud<pcl::PointXYZ> );
-  for( int i = 0; i < mSmallTransformedPCData.size(); ++i ) {
+  for( unsigned int i = 0; i < mSmallTransformedPCData.size(); ++i ) {
     numPoints += mSmallTransformedPCData[i]->points.size();
   }
   tempS->width = 1;
@@ -324,9 +335,9 @@ void Builder::stitchTransformedData() {
   std::string filenameS = stream.str();
   
   if( pcl::io::savePCDFile( filenameS, *mSmallBundledTransformedPointClouds, true ) == 0 ) {
-    std::cout << "Saved " << filename << "." << std::endl;
+    std::cout << "Saved " << filename << std::endl;
   }
-
+  */
 }
 
 /**
@@ -452,5 +463,93 @@ void Builder::pairAlign( const PointCloud::Ptr cloud_src,
   //*output += *cloud_src; // Only output
   printf("Size source: %d size target: %d size output: %d \n", src->points.size(), tgt->points.size(), output->points.size() );
   final_transform = targetToSource;
+
+}
+
+/**
+ * @function bundle2
+ */
+void Builder::bundle2() {
+
+
+  Eigen::Matrix4d pairTransform;
+
+  mTransformedPCData.resize(0);
+  mSmallTransformedPCData.resize(0);
+
+  // Add first one by default
+  //mTransformedPCData.push_back( mPCData[0] );
+
+  // For all pairs
+  for (size_t i = 0; i < mPCData.size (); ++i)
+  {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr result(new pcl::PointCloud<pcl::PointXYZ> );
+    PCL_INFO ("Aligning (%d) with (%d).\n", i, 0 );
+    pairAlign2 ( i, mPCData[i], result, pairTransform );
+
+    //save aligned pair, transformed into the first cloud's frame
+    std::stringstream ss;
+    ss << i << ".pcd";
+    pcl::io::savePCDFile (ss.str (), *result, true);  
+    mTransformedPCData.push_back( result );
+  }
+
+  // Stitch them together
+  stitchTransformedData();
+}
+
+/**
+ * @function pairAlign2
+ */
+void Builder::pairAlign2( int _index, 
+			  const pcl::PointCloud<pcl::PointXYZ>::Ptr &_target, 
+			  pcl::PointCloud<pcl::PointXYZ>::Ptr _output, 
+			  Eigen::Matrix4d &_final_transform ) {
+  
+  
+  // Find the transformation
+  _final_transform = Eigen::Matrix4d::Identity();
+  //_final_transform = ( mEndEffectorTransforms[_index].inverse() )*( mEndEffectorTransforms[0] );
+  // _final_transform = ( mEndEffectorTransforms[_index] )*( mEndEffectorTransforms[0].inverse() );
+  //_final_transform = ( mEndEffectorTransforms[0] )*( mEndEffectorTransforms[_index].inverse() );
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(  mEndEffectorTransforms[_index] );
+  _final_transform = mEndEffectorTransforms[_index];
+
+  Eigen::MatrixXd temp = mEndEffectorTransforms[_index];
+
+  std::cout << "Final transform for "<< _index << ": \n"<< _final_transform << std::endl;
+  std::cout << "With normal version: \n "<< temp << std::endl;
+  
+  // Transform target back in source frame
+  Eigen::Matrix4f ma = Eigen::MatrixXf::Identity(4,4);
+  
+  ma(0,0) = (float) _final_transform(0,0);
+  ma(0,1) = (float) _final_transform(0,1);
+  ma(0,2) = (float) _final_transform(0,2);
+  ma(0,3) = (float) _final_transform(0,3);
+  
+  ma(1,0) = (float) _final_transform(1,0);
+  ma(1,1) = (float) _final_transform(1,1);
+  ma(1,2) = (float) _final_transform(1,2);
+  ma(1,3) = (float) _final_transform(1,3);
+
+
+  ma(2,0) = (float) _final_transform(2,0);
+  ma(2,1) = (float) _final_transform(2,1);
+  ma(2,2) = (float) _final_transform(2,2);
+  ma(2,3) = (float) _final_transform(2,3);
+  
+  ma(3,0) = (float) _final_transform(3,0);
+  ma(3,1) = (float) _final_transform(3,1);
+  ma(3,2) = (float) _final_transform(3,2);
+  ma(3,3) = (float) _final_transform(3,3); 
+  
+  
+  std::cout << "Final transform in float for "<< _index << ": \n"<< ma << std::endl;
+
+    //  pcl::transformPointCloud (*_target, *_output, _final_transform );
+  pcl::transformPointCloud (*_target, *_output, ma );
+  //*output += *cloud_src; // Only output
+  printf("Size target: %d size output: %d \n", _target->points.size(), _output->points.size() );
 
 }

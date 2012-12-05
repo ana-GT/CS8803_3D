@@ -107,7 +107,8 @@ void ProjectTab::onButton(wxCommandEvent &evt) {
     depthMap();
     break;	
   case button_addPCD:
-    gB.addPCD( mGrabbedPCD );
+    mWorld->getRobot(0)->update();
+    gB.addPCD( mGrabbedPCD, mWorld->getRobot(0)->getNode( mCameraNodeName.c_str() )->getWorldTransform() );
     break;
   case button_getMesh:
     gB.getMesh(  gB.mBundledTransformedPointClouds );
@@ -116,7 +117,7 @@ void ProjectTab::onButton(wxCommandEvent &evt) {
     gB.showMesh();
     break;
   case button_runICP:
-    gB.bundle1();
+    gB.bundle2();
     break;
   case button_showFullPCD:
     gB.showFullPCD();
@@ -310,9 +311,14 @@ void ProjectTab::grabCloud () {
     // Save the pixel
     points.push_back(Vector3d(-distX, distY, -distZ));
     // Save the pointcloud
-    cloud->points[i].x = -distX;
+    /*
+    cloud->points[i].x = -distX; // -distX
     cloud->points[i].y = distY;
-    cloud->points[i].z = -distZ;
+    cloud->points[i].z = -distZ; // -distZ
+    */
+    cloud->points[i].x = -distZ; // -distX
+    cloud->points[i].y = -distY;
+    cloud->points[i].z = -distX; // -distZ
   }
   
   mGrabbedPCD = cloud;
@@ -343,6 +349,8 @@ void ProjectTab::depthMap () {
 ProjectTab::ProjectTab(wxWindow *parent, const wxWindowID id,
 		       const wxPoint& pos, const wxSize& size, long style) : GRIPTab(parent, id, pos, size, style) {
   
+  mCameraNodeName = "Camera";
+
   // ===========================================================
   // 1. Create the left side for the vision demonstration
   

@@ -76,7 +76,7 @@ class Builder {
   Builder();
   ~Builder();
 
-  bool addPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd );
+  bool addPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd, Eigen::Matrix4d _worldTransform );
   void show( pcl::PointCloud<pcl::PointXYZ>::Ptr _pcd );
 
   void getMesh( pcl::PointCloud<pcl::PointXYZ>::Ptr _cloud );
@@ -92,8 +92,17 @@ class Builder {
 		  bool downsample );
   void stitchTransformedData();
   
+  void bundle2();
+  void pairAlign2( int _index, 
+		   const pcl::PointCloud<pcl::PointXYZ>::Ptr &_target, 
+		   pcl::PointCloud<pcl::PointXYZ>::Ptr _output, 
+		   Eigen::Matrix4d &_final_transform );
+    
   // Variables
   boost::shared_ptr<pcl::visualization::PCLVisualizer> mViewer;
+  int mViewport1;
+  int mViewport2;
+
   std::vector< pcl::PointCloud<pcl::PointXYZ>::Ptr > mPCData;
   std::vector< pcl::PointCloud<pcl::PointXYZ>::Ptr > mTransformedPCData;
   std::vector< pcl::PointCloud<pcl::PointXYZ>::Ptr > mSmallTransformedPCData;
@@ -101,6 +110,7 @@ class Builder {
   pcl::PointCloud<pcl::PointXYZ>::Ptr mSmallBundledTransformedPointClouds;
   pcl::PolygonMesh mTriangleMesh;
   Eigen::Matrix4f mGlobalTransform;
+  std::vector<Eigen::MatrixXd> mEndEffectorTransforms;
 
   // Utils
   bool mSavePCDFlag;

@@ -41,7 +41,7 @@ void viewPoints( std::vector<std::vector<double> > _points,
 /**< viewPCD: Visualize a PCD cloud */
 void viewPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _cloud,
 	      boost::shared_ptr<pcl::visualization::PCLVisualizer> _viewer,
-	      int _r = 0, int _g = 255, int _b = 0 );
+	      int _r = 0, int _g = 255, int _b = 0, int _viewport = 0 );
 
 /**< viewPath: Visualize a path made of lines */
 void viewPath( std::vector<Eigen::Vector3d> _path, 

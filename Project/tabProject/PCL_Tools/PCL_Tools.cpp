@@ -37,7 +37,8 @@ boost::shared_ptr<pcl::visualization::PCLVisualizer> createViewer( int _r, int _
  **/
 void viewPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _cloud,
 	      boost::shared_ptr<pcl::visualization::PCLVisualizer> _viewer,
-	      int _r, int _g, int _b ) {
+	      int _r, int _g, int _b,
+	      int _viewport ) {
 
   pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> colorCloud( _cloud, _r, _g, _b );
 
@@ -46,7 +47,7 @@ void viewPCD( pcl::PointCloud<pcl::PointXYZ>::Ptr _cloud,
   std::string id( linename );
   PCL_TOOLS_COUNTER_PCD++;
 
-  _viewer->addPointCloud<pcl::PointXYZ> ( _cloud, colorCloud, id );
+  _viewer->addPointCloud<pcl::PointXYZ> ( _cloud, colorCloud, id, _viewport );
   _viewer->setPointCloudRenderingProperties( pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, id );
 
   _viewer->addCoordinateSystem(1.0);

@@ -111,6 +111,9 @@ public:
   // Cloud grabbed
   pcl::PointCloud<pcl::PointXYZ>::Ptr mGrabbedPCD;
 
+  // End effector name
+  std::string mCameraNodeName;
+
   // The macros for wxWidget
  public:
   DECLARE_DYNAMIC_CLASS(ProjectTab)
